@@ -1,0 +1,76 @@
+name: miniappscraper
+
+# Split architecture: the Python pipeline runs in a container, while Appium,
+# the adb server and Burp stay on the host (the Android device is on USB and
+# Docker Desktop for macOS cannot pass it through). See docker/README-docker.md.
+
+x-common: &common
+  extra_hosts:
+    # Docker Desktop resolves this already; the mapping keeps Linux hosts working.
+    - "host.docker.internal:host-gateway"
+  environment:
+    APPS_DIR: /app/Analysis results
+    BURP_LOG_FILE: /app/burp_log.txt
+    BURP_CONFIG_FILE: /app/proxy_config.json
+    BURP_PROXY_IP: ${BURP_PROXY_IP:-}
+    # Host/port are kept separate from APPIUM_SERVER_URL and ADB_SERVER_SOCKET on
+    # purpose: those two may already be in .env with 127.0.0.1 values for a host
+    # run, which inside a container would point at the container itself.
+    APPIUM_SERVER_URL: http://${APPIUM_HOST:-host.docker.internal}:${APPIUM_PORT:-4723}
+    # adb client -> adb server on the host. Start it there with:
+    #   adb kill-server && adb -a -P 5037 nodaemon server
+    ADB_SERVER_SOCKET: tcp:${ADB_HOST:-host.docker.internal}:${ADB_PORT:-5037}
+    # Appium and the adb server are host-managed: the container must never try
+    # to spawn or kill them (it would take down the host's adb server).
+    APPIUM_AUTOSTART: "false"
+    ADB_MANAGE_SERVER: "false"
+    # Device capabilities (were hardcoded in scripts/DynamicAnalysis.py).
+    # Leave ANDROID_DEVICE_NAME empty to let Appium pick the only attached device.
+    ANDROID_DEVICE_NAME: ${ANDROID_DEVICE_NAME:-}
+    ANDROID_PLATFORM_VERSION: ${ANDROID_PLATFORM_VERSION:-16}
+    TELEGRAM_APP_PACKAGE: ${TELEGRAM_APP_PACKAGE:-org.telegram.messenger}
+    TELEGRAM_APP_ACTIVITY: ${TELEGRAM_APP_ACTIVITY:-org.telegram.ui.LaunchActivity}
+    WEBVIEW_DEVTOOLS_PORT: ${WEBVIEW_DEVTOOLS_PORT:-9222}
+    # Host paths: resolved by Appium, which runs on the host, not in here.
+    CHROMEDRIVER_DIR: ${CHROMEDRIVER_DIR:-}
+    CHROMEDRIVER_MAPPING_FILE: ${CHROMEDRIVER_MAPPING_FILE:-}
+
+services:
+  # Full dynamic-analysis run over ScraperMiniApp/rerun.txt.
+  #   docker compose run --rm pipeline                       # batch (script.sh)
+  #   docker compose run --rm pipeline python Automator.py @wallet
+  pipeline:
+    <<: *common
+    build:
+      context: .
+      target: runtime
+    image: miniappscraper:runtime
+    volumes:
+      # Long syntax: the directory name contains a space, which the short
+      # "src:dst" form cannot express unambiguously.
+      - type: bind
+        source: ./Analysis results
+        target: /app/Analysis results
+      - ${BURP_LOG_HOST_PATH:-./burp_log.txt}:/app/burp_log.txt
+      - ./ScraperMiniApp/rerun.txt:/app/ScraperMiniApp/rerun.txt:ro
+    init: true
+    stdin_open: true
+    tty: true
+
+  # tapps.center catalog scraper. Independent from the device: needs no adb or
+  # Appium, only Chromium, so it skips the preflight.
+  #   docker compose run --rm scraper
+  scraper:
+    build:
+      context: .
+      target: scraper
+    image: miniappscraper:scraper
+    environment:
+      SKIP_PREFLIGHT: "true"
+      CHROME_HEADLESS: ${CHROME_HEADLESS:-true}
+      TAPPS_CSV: /app/out/tapps_apps_live.csv
+    volumes:
+      - ./out:/app/out
+    init: true
+    # Chromium needs more than the default 64 MB of /dev/shm.
+    shm_size: 1gb
