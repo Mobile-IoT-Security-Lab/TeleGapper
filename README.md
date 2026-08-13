@@ -166,5 +166,5 @@ python ScraperMiniApp/scraper.py
 - WebView debug is enabled via `adb shell setprop debug.chromium.webview_debug true`.
 - The current workflow reboots the device at the end of each run (`adb reboot` in `reboot_device()`).
 - The Tapps scraper uses Selenium 4 driver management by default and optionally `webdriver-manager` if installed.
-- **Note on Scraper Mini App**: The scraper was functional until June 2026. The interface of the scraped site was changed in August 2026. However, the site can still be found on the snapshot from June 6, 2026, on the [Wayback Machine - Internet Archive](http://wayback.archive.org).
+- **Note on Scraper Mini App**: The scraper was functional until June 2026. The interface of the scraped site was changed in August 2026. However, the site can still be found on the snapshot from June 6, 2026, on the [Wayback Machine - Internet Archive](https://web.archive.org/web/20260606072458/https://tapps.center/).
 
