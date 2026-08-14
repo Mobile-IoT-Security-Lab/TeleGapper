@@ -1,5 +1,23 @@
 # TeleGapper
 
+[![arXiv](https://img.shields.io/badge/arXiv-2608.13390-b31b1b.svg)](https://arxiv.org/abs/2608.13390)
+
+## Citation
+
+If you use TeleGapper in your research, please cite our paper:
+
+```bibtex
+@misc{ferrari2026telegapperunreliabilityprivacypolicies,
+      title={TeleGapper: On the (un)reliability of Privacy Policies in Telegram Mini apps}, 
+      author={Luca Ferrari and Mariano Ceccato and Luca Verderame},
+      year={2026},
+      eprint={2608.13390},
+      archivePrefix={arXiv},
+      primaryClass={cs.CR},
+      url={https://arxiv.org/abs/2608.13390}, 
+}
+```
+
 **TeleGapper** is a black-box dynamic analysis tool for Telegram Mini Apps on Android devices.
 
 It drives Telegram with Appium, opens a target bot, starts the Mini App, dumps UI/HTML, copies proxy traffic, and builds a JSON report with extracted sensitive-data indicators.
@@ -167,4 +185,3 @@ python ScraperMiniApp/scraper.py
 - The current workflow reboots the device at the end of each run (`adb reboot` in `reboot_device()`).
 - The Tapps scraper uses Selenium 4 driver management by default and optionally `webdriver-manager` if installed.
 - **Note on Scraper Mini App**: The scraper was functional until June 2026. The interface of the scraped site was changed in August 2026. However, the site can still be found on the snapshot from June 6, 2026, on the [Wayback Machine - Internet Archive](https://web.archive.org/web/20260606072458/https://tapps.center/).
-
