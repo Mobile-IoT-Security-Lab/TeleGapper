@@ -20,7 +20,7 @@ If you use TeleGapper in your research, please cite our paper:
 
 **TeleGapper** is a black-box dynamic analysis tool for Telegram Mini Apps on Android devices.
 
-It drives Telegram with Appium, opens a target bot, starts the Mini App, dumps UI/HTML, copies proxy traffic, and builds a JSON report with extracted sensitive-data indicators.
+It drives Telegram with Appium, opens a target bot, starts the Mini App, saves HTML, copies proxy traffic, and builds JSON reports with extracted sensitive-data indicators.
 
 ## Methodology
 
@@ -43,44 +43,36 @@ custom policy go to a manual reviewer before the violation verdict is issued.
 
 - Automated Telegram navigation (`@bot` search, chat open, Mini App launch)
 - Native + WebView extraction flow
-- XML UI dump and HTML source dump
+- HTML source dump (XML UI dump helpers are available but disabled in the current flow)
 - Per-bot traffic copy from Burp log
 - Traffic analysis report (`scripts/TrafficAnalysis.py`)
-- Privacy keyword checks on HTML/XML output
+- Privacy keyword checks on HTML and on XML when an XML dump is available
 
 ## Repository Layout
 
 - `Automator.py`: main entry point
 - `ScraperMiniApp/scraper.py`: Selenium scraper for `https://tapps.center/`
-- `ScraperMiniApp/botList.txt`: list of Telegram bots used by batch flows
+- `ScraperMiniApp/README.md`: scraper usage, configuration and limitations
+- `ScraperMiniApp/D_ExcludedHost.txt`: existing list of bot usernames
+- `tapps_apps_live_June.csv`: bundled June catalog snapshot
 - `scripts/DynamicAnalysis.py`: Appium flow + extraction pipeline
 - `scripts/Util.py`: filesystem, WebView/debug helpers, keyword scan
 - `scripts/ProxySetUp.py`: Burp log reset/copy utilities
 - `scripts/TrafficAnalysis.py`: traffic parser and report generator
-- `script.sh`: batch execution over `ScraperMiniApp/botList.txt`
-- `Analysis results/`: generated artifacts (xml/html/traffic/res)
+- `script.sh`: batch execution over `ScraperMiniApp/rerun.txt` (create this input file before running a batch)
+- `Analysis results/`: analysis output directory; includes sample privacy-policy HTML/PDF files for `@wallet`
 - `Dockerfile`, `docker-compose.yml`, `docker/`: containerized pipeline
 
 ## Docker
 
 TeleGapper can run in a container while Appium, the adb server and Burp stay on
-the host (the Android device is on USB, which Docker Desktop cannot pass through):
+the host (the Android device is on USB, which Docker Desktop cannot pass through).
 
-```bash
-cp .env.example .env          # set the device serial and chromedriver paths
-docker compose build
-
-# on the host, once per session
-adb kill-server && adb -a -P 5037 nodaemon server &
-appium --address 0.0.0.0 --allow-insecure uiautomator2:chromedriver_autodownload
-
-docker compose run --rm pipeline                                # batch
-docker compose run --rm pipeline python Automator.py @wallet    # single bot
-docker compose run --rm scraper                                 # tapps catalog
-```
-
-See [docker/README-docker.md](docker/README-docker.md) for the full rationale and
-troubleshooting.
+Follow [docker/README-docker.md](docker/README-docker.md) to create the local
+configuration and input files, build the images, and start the host services.
+The pipeline requires a Burp log file and `ScraperMiniApp/rerun.txt` for its
+bind mounts, including when running a single bot. Neither file is bundled.
+The scraper service runs independently of those files and the Android device.
 
 ## Prerequisites
 
@@ -89,7 +81,8 @@ troubleshooting.
 - `adb` available in PATH and USB debugging enabled
 - Appium server running (default `http://127.0.0.1:4723`)
 - Matching Chromedriver binaries for Telegram WebView
-- Burp Suite logging to a text file (recommended for traffic analysis)
+- Burp Suite logging to a text file, with the device configured to send traffic through it
+- WeasyPrint native libraries for privacy-policy PDF export (the Docker image installs them)
 
 ## Setup
 
@@ -106,43 +99,42 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-3. Configure `.env` (start from `.env.example`):
+3. Create `.env` in the repository root with the following settings, adapting
+   paths and device capabilities to your machine. No `.env.example` is bundled:
 
 ```env
 APPIUM_SERVER_URL="http://127.0.0.1:4723"
-APPS_DIR="/absolute/path/to/TeleGapper/Analysis results"
-BURP_LOG_FILE="/absolute/path/to/TeleGapper/burp_log.txt"
-BURP_CONFIG_FILE="/absolute/path/to/TeleGapper/proxy_config.json"
-BURP_PROXY_IP="192.168.x.x:8080"
+APPS_DIR="Analysis results"
+BURP_LOG_FILE="burp_log.txt"
 ```
 
-All path settings are resolved to absolute paths at import time: an absolute
-value is used as is, and a relative one is anchored at the repository root
-(never at the current working directory), so a run started from any directory
-reads and writes the same files. Leaving a path unset falls back to the
-repository-root default (`Analysis results/`, `appium_server.log`).
+`APPS_DIR`, `BURP_LOG_FILE` and `APPIUM_LOG_FILE` are resolved relative to the
+repository root unless absolute. `APPS_DIR` defaults to `Analysis results/` and
+`APPIUM_LOG_FILE` to `appium_server.log`. `BURP_LOG_FILE` is required and has no
+default. Configure the device proxy and Burp logging separately; the pipeline
+does not configure Burp from `proxy_config.json`.
 
-4. Set the device capabilities in `.env` (they are no longer hardcoded in
-   `scripts/DynamicAnalysis.py`):
+4. Add the device capabilities to `.env`:
 
 ```env
 ANDROID_DEVICE_NAME="<adb devices serial>"   # empty = let Appium pick the only device
-ANDROID_PLATFORM_VERSION="16"
+ANDROID_PLATFORM_VERSION="16"              # set to your device's Android version
 CHROMEDRIVER_DIR="/absolute/path/to/chromedrivers"
 CHROMEDRIVER_MAPPING_FILE="/absolute/path/to/chromedriver_mapping.json"
 ```
 
-5. Create screenshot output directory if missing:
-
-```bash
-mkdir -p "Analysis results/screenshot"
-```
+5. The pipeline creates its output directories automatically. XML dumps and
+   screenshot capture are currently commented out in `scripts/DynamicAnalysis.py`.
 
 ## Burp Logging (One-Time)
 
 Configure Burp to continuously log Proxy requests/responses to the same file used in `BURP_LOG_FILE`.
 
-The run flow clears that file at startup and then copies it to `Analysis results/traffic/@<bot>_traffic.txt` at the end.
+The run flow clears that file before Mini App initialization, copies the initial
+traffic to `Analysis results/trafficStart/@<bot>_traffic.txt`, clears the log
+before interaction, and copies interaction traffic to
+`Analysis results/trafficEnd/@<bot>_traffic.txt` at the end. It clears the source
+log again after analysis.
 
 ## Usage
 
@@ -158,9 +150,15 @@ appium --allow-insecure uiautomator2:chromedriver_autodownload
 python Automator.py @DetectivePuzzlesBot
 ```
 
-3. Run batch mode from `ScraperMiniApp/botList.txt`:
+3. Create `ScraperMiniApp/rerun.txt` with one bot username per line (including
+   the leading `@`), then run batch mode. This file is a local input and is not
+   included in the repository. For example:
 
 ```bash
+cat > ScraperMiniApp/rerun.txt <<'EOF'
+@wallet
+@DetectivePuzzlesBot
+EOF
 bash ./script.sh
 ```
 
@@ -170,13 +168,25 @@ bash ./script.sh
 python ScraperMiniApp/scraper.py
 ```
 
+See [ScraperMiniApp/README.md](ScraperMiniApp/README.md) for browser settings,
+CSV output and the scraper's historical site compatibility limitation. The
+scraper produces a catalog CSV; it does not create the batch input file.
+
 ## Output
 
-- `Analysis results/xml/<slug>_ui_dump.xml`
 - `Analysis results/html/<slug>_mini_app.html`
-- `Analysis results/traffic/@<bot>_traffic.txt`
-- `Analysis results/res/*_report.json` (traffic findings + privacy checks)
+- `Analysis results/trafficStart/@<bot>_traffic.txt` (initial traffic)
+- `Analysis results/trafficEnd/@<bot>_traffic.txt` (interaction traffic)
+- `Analysis results/resStart/<bot>_report.json` (initial traffic findings and privacy keyword checks; report name without `@`)
+- `Analysis results/resEnd/<bot>_report.json` (interaction traffic findings; report name without `@`)
+- `Analysis results/dynamicAnalysis/<slug>/clicks.json` (interaction log, when clicks are recorded)
+- `Analysis results/PrivacyPolicies/@<bot>_privacy_policy.html` and/or `.pdf` (when policy retrieval/export succeeds)
 - `tapps_apps_live.csv` (generated by `ScraperMiniApp/scraper.py` at the repository root, or at `TAPPS_CSV` if set)
+
+`APPS_DIR` changes the analysis output root. `<slug>` is the bot username with
+`@` and every lowercase `bot` substring removed, as implemented by
+`Util.bot_slug()`. XML and screenshot directories are also created, but the
+current flow does not capture those artifacts.
 
 ## Notes
 
