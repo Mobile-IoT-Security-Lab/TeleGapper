@@ -1,0 +1,24 @@
+
+cff-version: 1.2.0
+message: "If you use TeleGapper, please cite our paper."
+title: "TeleGapper"
+authors:
+  - family-names: "Ferrari"
+    given-names: "Luca"
+  - family-names: "Ceccato"
+    given-names: "Mariano"
+  - family-names: "Verderame"
+    given-names: "Luca"
+url: "https://github.com/Mobile-IoT-Security-Lab/TeleGapper"
+preferred-citation:
+  type: generic
+  title: "TeleGapper: On the (un)reliability of Privacy Policies in Telegram Mini apps"
+  authors:
+    - family-names: "Ferrari"
+      given-names: "Luca"
+    - family-names: "Ceccato"
+      given-names: "Mariano"
+    - family-names: "Verderame"
+      given-names: "Luca"
+  year: 2026
+  url: "https://arxiv.org/abs/2608.13390"
